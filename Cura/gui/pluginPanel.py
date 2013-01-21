@@ -69,6 +69,7 @@ class pluginPanel(wx.Panel):
 		for pluginTest in self.pluginList:
 			if pluginTest['filename'] == pluginConfig['filename']:
 				plugin = pluginTest
+				break
 		if plugin == None:
 			return False
 		
@@ -158,11 +159,24 @@ class pluginPanel(wx.Panel):
 		panel = e.GetEventObject().GetParent()
 		sizer = self.pluginEnabledPanel.GetSizer()
 		idx = self.panelList.index(panel)
-		
-		fname = self.pluginConfig[idx]['filename'].lower()
-		fname = fname[0].upper() + fname[1:]
-		fname = fname[:fname.rfind('.')]
-		webbrowser.open('http://wiki.ultimaker.com/CuraPlugin:_' + fname)
+
+		plugin = None
+		for pluginTest in self.pluginList:
+			if pluginTest['filename'] == self.pluginConfig[idx]['filename']:
+				plugin = pluginTest
+				break
+				
+		help = plugin['help']
+		if help is not None:
+			if "/" in help:
+				webbrowser.open(help)
+			else:
+				webbrowser.open('http://wiki.ultimaker.com/CuraPlugin:_' + help)
+		else:
+			fname = self.pluginConfig[idx]['filename'].lower()
+			fname = fname[0].upper() + fname[1:]
+			fname = fname[:fname.rfind('.')]
+			webbrowser.open('http://wiki.ultimaker.com/CuraPlugin:_' + fname)
 	
 	def OnGeneralHelp(self, e):
 		webbrowser.open('http://wiki.ultimaker.com/Category:CuraPlugin')

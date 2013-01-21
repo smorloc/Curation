@@ -569,7 +569,7 @@ def getPluginList():
 			if filename.startswith('_'):
 				continue
 			with open(os.path.join(basePath, filename), "r") as f:
-				item = {'filename': filename, 'name': None, 'info': None, 'type': None, 'params': []}
+				item = {'filename': filename, 'name': None, 'info': None, 'type': None, 'help': None, 'params': []}
 				for line in f:
 					line = line.strip()
 					if not line.startswith('#'):
@@ -583,6 +583,8 @@ def getPluginList():
 						item['info'] = line[1].strip()
 					elif line[0].upper() == 'TYPE':
 						item['type'] = line[1].strip()
+					elif line[0].upper() == 'HELP':
+						item['help'] = line[1].strip()
 					elif line[0].upper() == 'DEPEND':
 						pass
 					elif line[0].upper() == 'PARAM':
