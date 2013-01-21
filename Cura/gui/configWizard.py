@@ -283,7 +283,6 @@ class MachineSelectPage(InfoPage):
 			profile.putPreference('machine_depth', '80')
 			profile.putPreference('machine_height', '60')
 			profile.putPreference('machine_type', 'reprap')
-			profile.putPreference('startMode', 'Normal')
 			profile.putProfileSetting('nozzle_size', '0.5')
 		profile.putProfileSetting('wall_thickness', float(profile.getProfileSetting('nozzle_size')) * 2)
 

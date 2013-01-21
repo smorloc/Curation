@@ -14,7 +14,6 @@ from Cura.gui import preferencesDialog
 from Cura.gui import configWizard
 from Cura.gui import firmwareInstall
 from Cura.gui import printWindow
-from Cura.gui import simpleMode
 from Cura.gui import projectPlanner
 from Cura.gui.tools import batchRun
 from Cura.gui import flatSlicerWindow
@@ -35,8 +34,6 @@ class mainWindow(wx.Frame):
 		wx.EVT_CLOSE(self, self.OnClose)
 
 		self.SetDropTarget(dropTarget.FileDropTarget(self.OnDropFiles, meshLoader.supportedExtensions()))
-
-		self.normalModeOnlyItems = []
 
 		mruFile = os.path.join(profile.getBasePath(), 'mru_filelist.ini')
 		self.config = wx.FileConfig(appName="Cura", 
@@ -64,17 +61,13 @@ class mainWindow(wx.Frame):
 
 		self.fileMenu.AppendSeparator()
 		i = self.fileMenu.Append(-1, 'Open Profile...')
-		self.normalModeOnlyItems.append(i)
 		self.Bind(wx.EVT_MENU, self.OnLoadProfile, i)
 		i = self.fileMenu.Append(-1, 'Save Profile...')
-		self.normalModeOnlyItems.append(i)
 		self.Bind(wx.EVT_MENU, self.OnSaveProfile, i)
 		i = self.fileMenu.Append(-1, 'Load Profile from GCode...')
-		self.normalModeOnlyItems.append(i)
 		self.Bind(wx.EVT_MENU, self.OnLoadProfileFromGcode, i)
 		self.fileMenu.AppendSeparator()
 		i = self.fileMenu.Append(-1, 'Reset Profile to default')
-		self.normalModeOnlyItems.append(i)
 		self.Bind(wx.EVT_MENU, self.OnResetProfile, i)
 
 		self.fileMenu.AppendSeparator()
@@ -102,13 +95,6 @@ class mainWindow(wx.Frame):
 		self.menubar.Append(self.fileMenu, '&File')
 
 		toolsMenu = wx.Menu()
-		i = toolsMenu.Append(-1, 'Switch to quickprint...')
-		self.switchToQuickprintMenuItem = i
-		self.Bind(wx.EVT_MENU, self.OnSimpleSwitch, i)
-		i = toolsMenu.Append(-1, 'Switch to full settings...')
-		self.switchToNormalMenuItem = i
-		self.Bind(wx.EVT_MENU, self.OnNormalSwitch, i)
-		toolsMenu.AppendSeparator()
 		i = toolsMenu.Append(-1, 'Batch run...')
 		self.Bind(wx.EVT_MENU, self.OnBatchRun, i)
 		i = toolsMenu.Append(-1, 'Project planner...')
@@ -122,7 +108,6 @@ class mainWindow(wx.Frame):
 
 		expertMenu = wx.Menu()
 		i = expertMenu.Append(-1, 'Open expert settings...')
-		self.normalModeOnlyItems.append(i)
 		self.Bind(wx.EVT_MENU, self.OnExpertOpen, i)
 		expertMenu.AppendSeparator()
 		if firmwareInstall.getDefaultFirmware() is not None:
@@ -159,12 +144,10 @@ class mainWindow(wx.Frame):
 		self.rightPane = wx.Panel(self.splitter, style=wx.BORDER_NONE)
 
 		##Gui components##
-		self.simpleSettingsPanel = simpleMode.simpleModePanel(self.leftPane)
-		self.normalSettingsPanel = normalSettingsPanel(self.leftPane)
+		self.settingsPanel = settingsPanel(self.leftPane)
 
 		self.leftSizer = wx.BoxSizer(wx.VERTICAL)
-		self.leftSizer.Add(self.simpleSettingsPanel)
-		self.leftSizer.Add(self.normalSettingsPanel, 1, wx.EXPAND)
+		self.leftSizer.Add(self.settingsPanel, 1, wx.EXPAND)
 		self.leftPane.SetSizer(self.leftSizer)
 		
 		#Preview window
@@ -217,17 +200,16 @@ class mainWindow(wx.Frame):
 
 		self.updateProfileToControls()
 
-		self.SetBackgroundColour(self.normalSettingsPanel.GetBackgroundColour())
+		self.SetBackgroundColour(self.settingsPanel.GetBackgroundColour())
 
-		self.simpleSettingsPanel.Show(False)
-		self.normalSettingsPanel.Show(False)
+		self.settingsPanel.Show(True)
 
 		# Set default window size & position
 		self.SetSize((wx.Display().GetClientArea().GetWidth()/2,wx.Display().GetClientArea().GetHeight()/2))
 		self.Centre()
 
 		# Restore the window position, size & state from the preferences file
-		self.normalSashPos = 320
+		self.windowSashPos = 320
 		try:
 			if profile.getPreference('window_maximized') == 'True':
 				self.Maximize(True)
@@ -241,47 +223,23 @@ class mainWindow(wx.Frame):
 			if width > 0 and height > 0:
 				self.SetSize((width,height))
 				
-			self.normalSashPos = int(profile.getPreference('window_normal_sash'))
+			self.windowSashPos = int(profile.getPreference('window_sash'))
 		except:
 			pass
 
-		self.splitter.SplitVertically(self.leftPane, self.rightPane, self.normalSashPos)
+		self.splitter.SplitVertically(self.leftPane, self.rightPane, self.windowSashPos)
 
 		self.updateSliceMode()
 
 		self.Show(True)
 
 	def updateSliceMode(self):
-		isSimple = profile.getPreference('startMode') == 'Simple'
-
-		self.normalSettingsPanel.Show(not isSimple)
-		self.simpleSettingsPanel.Show(isSimple)
-
-		for i in self.normalModeOnlyItems:
-			i.Enable(not isSimple)
-		self.switchToQuickprintMenuItem.Enable(not isSimple)
-		self.switchToNormalMenuItem.Enable(isSimple)
-
-		self.normalSettingsPanel.Layout()
-		self.simpleSettingsPanel.Layout()		
+		self.settingsPanel.Layout()
 		self.leftPane.GetSizer().Layout()
 		
 		# Set splitter sash position & size
-		if isSimple:
-			# Save normal mode sash
-			self.normalSashPos = self.splitter.GetSashPosition()
-			
-			# Change location of sash to width of quick mode pane 
-			(width, height) = self.simpleSettingsPanel.GetSizer().GetSize() 
-			self.splitter.SetSashPosition(width, True)
-			
-			# Disable sash
-			self.splitter.SetSashSize(0)
-		else:
-			self.splitter.SetSashPosition(self.normalSashPos, True)
-
-			# Enabled sash
-			self.splitter.SetSashSize(4)
+		self.splitter.SetSashPosition(self.windowSashPos, True)
+		self.splitter.SetSashSize(4)
 			
 	def OnPreferences(self, e):
 		prefDialog = preferencesDialog.preferencesDialog(self)
@@ -339,11 +297,7 @@ class mainWindow(wx.Frame):
 		if len(self.filelist) < 1:
 			wx.MessageBox('You need to load a file before you can prepare it.', 'Print error', wx.OK | wx.ICON_INFORMATION)
 			return
-		isSimple = profile.getPreference('startMode') == 'Simple'
-		if isSimple:
-			#save the current profile so we can put it back latter
-			oldProfile = profile.getGlobalProfileString()
-			self.simpleSettingsPanel.setupSlice()
+			
 		#Create a progress panel and add it to the window. The progress panel will start the Skein operation.
 		spp = sliceProgessPanel.sliceProgessPanel(self, self, self.filelist)
 		self.sizer.Add(spp, (len(self.progressPanelList)+2,0), span=(1, 3 + self.extruderCount), flag=wx.EXPAND)
@@ -353,8 +307,6 @@ class mainWindow(wx.Frame):
 		if newSize.GetWidth() < wx.GetDisplaySize()[0]:
 			self.SetSize(newSize)
 		self.progressPanelList.append(spp)
-		if isSimple:
-			profile.loadGlobalProfileFromString(oldProfile)
 
 	def OnPrint(self, e):
 		if len(self.filelist) < 1:
@@ -419,8 +371,7 @@ class mainWindow(wx.Frame):
 
 	def updateProfileToControls(self):
 		self.preview3d.updateProfileToControls()
-		self.normalSettingsPanel.updateProfileToControls()
-		self.simpleSettingsPanel.updateProfileToControls()
+		self.settingsPanel.updateProfileToControls()
 
 	def OnLoadProfile(self, e):
 		dlg=wx.FileDialog(self, "Select profile file to load", os.path.split(profile.getPreference('lastFile'))[0], style=wx.FD_OPEN|wx.FD_FILE_MUST_EXIST)
@@ -471,14 +422,6 @@ class mainWindow(wx.Frame):
 		br = batchRun.batchRunWindow(self)
 		br.Centre()
 		br.Show(True)
-
-	def OnSimpleSwitch(self, e):
-		profile.putPreference('startMode', 'Simple')
-		self.updateSliceMode()
-
-	def OnNormalSwitch(self, e):
-		profile.putPreference('startMode', 'Normal')
-		self.updateSliceMode()
 
 	def OnDefaultMarlinFirmware(self, e):
 		firmwareInstall.InstallFirmware()
@@ -543,21 +486,19 @@ class mainWindow(wx.Frame):
 			profile.putPreference('window_width', width)
 			profile.putPreference('window_height', height)			
 			
-			# Save normal sash position.  If in normal mode (!simple mode), get last position of sash before saving it...
-			isSimple = profile.getPreference('startMode') == 'Simple'
-			if not isSimple:
-				self.normalSashPos = self.splitter.GetSashPosition()
-			profile.putPreference('window_normal_sash', self.normalSashPos)
+			# Save sash position
+			self.windowSashPos = self.splitter.GetSashPosition()
+			profile.putPreference('window_sash', self.windowSashPos)
 			
 		self.Destroy()
 
 	def OnQuit(self, e):
 		self.Close()
 
-class normalSettingsPanel(configBase.configPanelBase):
+class settingsPanel(configBase.configPanelBase):
 	"Main user interface window"
 	def __init__(self, parent):
-		super(normalSettingsPanel, self).__init__(parent)
+		super(settingsPanel, self).__init__(parent)
 
 		#Main tabs
 		nb = wx.Notebook(self)
@@ -664,6 +605,6 @@ class normalSettingsPanel(configBase.configPanelBase):
 		nb.AddPage(self.alterationPanel, "Start/End-GCode")
 
 	def updateProfileToControls(self):
-		super(normalSettingsPanel, self).updateProfileToControls()
+		super(settingsPanel, self).updateProfileToControls()
 		self.alterationPanel.updateProfileToControls()
 		self.pluginPanel.updateProfileToControls()
