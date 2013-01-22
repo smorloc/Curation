@@ -188,7 +188,13 @@ class mainWindow(wx.Frame):
 		if self.extruderCount > 3:
 			sizer.Add(loadButton4, (1,4), flag=wx.RIGHT|wx.BOTTOM|wx.TOP, border=5)
 		sizer.Add(sliceButton, (1,1+self.extruderCount), flag=wx.RIGHT|wx.BOTTOM|wx.TOP, border=5)
-		sizer.Add(printButton, (1,2+self.extruderCount), flag=wx.RIGHT|wx.BOTTOM|wx.TOP, border=5)
+		sizer.Add(printButton, (1,2+self.extruderCount), flag=wx.RIGHT|wx.BOTTOM|wx.TOP, border=5)		
+		
+		# Main window sizer
+		sizer = wx.BoxSizer(wx.VERTICAL)
+		self.SetSizer(sizer)
+		sizer.Add(self.splitter, 1, wx.EXPAND)
+		sizer.Layout()
 		self.sizer = sizer
 
 		if len(self.filelist) > 0:
@@ -225,22 +231,15 @@ class mainWindow(wx.Frame):
 				
 			self.windowSashPos = int(profile.getPreference('window_sash'))
 		except:
-			pass
+			self.Maximize(True)
 
+		# Set splitter sash position & size
 		self.splitter.SplitVertically(self.leftPane, self.rightPane, self.windowSashPos)
-
-		self.updateSliceMode()
+		self.splitter.SetSashPosition(self.windowSashPos, True)
+		self.splitter.SetSashSize(4)
 
 		self.Show(True)
 
-	def updateSliceMode(self):
-		self.settingsPanel.Layout()
-		self.leftPane.GetSizer().Layout()
-		
-		# Set splitter sash position & size
-		self.splitter.SetSashPosition(self.windowSashPos, True)
-		self.splitter.SetSashSize(4)
-			
 	def OnPreferences(self, e):
 		prefDialog = preferencesDialog.preferencesDialog(self)
 		prefDialog.Centre()
@@ -300,7 +299,7 @@ class mainWindow(wx.Frame):
 			
 		#Create a progress panel and add it to the window. The progress panel will start the Skein operation.
 		spp = sliceProgessPanel.sliceProgessPanel(self, self, self.filelist)
-		self.sizer.Add(spp, (len(self.progressPanelList)+2,0), span=(1, 3 + self.extruderCount), flag=wx.EXPAND)
+		self.sizer.Add(spp, 0, flag=wx.EXPAND)
 		self.sizer.Layout()
 		newSize = self.GetSize()
 		newSize.IncBy(0, spp.GetSize().GetHeight())
@@ -361,12 +360,6 @@ class mainWindow(wx.Frame):
 			self.SetSize(newSize)
 		spp.Show(False)
 		self.sizer.Detach(spp)
-		for spp in self.progressPanelList:
-			self.sizer.Detach(spp)
-		i = 2
-		for spp in self.progressPanelList:
-			self.sizer.Add(spp, (i,0), span=(1,3 + self.extruderCount), flag=wx.EXPAND)
-			i += 1
 		self.sizer.Layout()
 
 	def updateProfileToControls(self):
@@ -484,7 +477,7 @@ class mainWindow(wx.Frame):
 			profile.putPreference('window_pos_y', posy)
 			(width, height) = self.GetSize()
 			profile.putPreference('window_width', width)
-			profile.putPreference('window_height', height)			
+			profile.putPreference('window_height', height)
 			
 			# Save sash position
 			self.windowSashPos = self.splitter.GetSashPosition()
