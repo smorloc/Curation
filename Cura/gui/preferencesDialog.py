@@ -69,6 +69,9 @@ class preferencesDialog(wx.Frame):
 		configBase.TitleRow(right, 'Cura settings')
 		c = configBase.SettingRow(right, 'Check for updates', 'check_for_updates', True, 'Check for newer versions of Cura on startup', type = 'preference')
 
+		c = configBase.SettingRow(right, 'Prompt for filename', 'filename_prompt', False, 'Prompt for a filename when saving files', type = 'preference')
+		c = configBase.SettingRow(right, 'Prompt on overwrite file', 'file_overwrite_prompt', False, 'Prompt for overwrite when output file already exits', type = 'preference')
+
 		self.okButton = wx.Button(right, -1, 'Ok')
 		right.GetSizer().Add(self.okButton, (right.GetSizer().GetRows(), 0), flag=wx.BOTTOM, border=5)
 		self.okButton.Bind(wx.EVT_BUTTON, self.OnClose)

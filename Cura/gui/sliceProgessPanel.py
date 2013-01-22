@@ -45,7 +45,23 @@ class sliceProgessPanel(wx.Panel):
 		if profile.getPreference('save_profile') == 'True':
 			profile.saveGlobalProfile(self.filelist[0][: self.filelist[0].rfind('.')] + "_profile.ini")
 		center = profile.getMachineCenterCoords() + profile.getObjectMatrix()
-		cmdList = [sliceRun.getSliceCommand(sliceRun.getExportFilename(self.filelist[0]), ['|'.join(self.filelist)], [center])]
+		outputFilename = sliceRun.getExportFilename(self.filelist[0])
+
+		if  profile.getPreference('filename_prompt') == 'True' or (os.path.exists(outputFilename) and profile.getPreference('file_overwrite_prompt') == 'True'):
+			style = wx.FD_SAVE
+			if profile.getPreference('file_overwrite_prompt') == 'True':
+				style = style | wx.FD_OVERWRITE_PROMPT
+			dlg=wx.FileDialog(self, "Select gcode file to save", os.path.split(outputFilename)[0], os.path.split(outputFilename)[1], style=style)		
+			dlg.SetWildcard("gcode files (*.gcode, *.g)|*.gcode;*.g")
+			if dlg.ShowModal() != wx.ID_OK:
+				dlg.Destroy()
+				self.abort = True
+				self.statusText.SetLabel("Aborted by user.")
+				return
+			outputFilename = dlg.GetPath()
+			dlg.Destroy()
+		
+		cmdList = [sliceRun.getSliceCommand(outputFilename, ['|'.join(self.filelist)], [center])]
 		self.thread = WorkerThread(self, filelist, cmdList)
 	
 	def OnAbort(self, e):
