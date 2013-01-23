@@ -5,15 +5,11 @@ import wx
 from Cura.gui import configBase
 from Cura.util import validators
 
-class expertConfigWindow(wx.Frame):
-	"Expert configuration window"
-	def __init__(self):
-		super(expertConfigWindow, self).__init__(None, title='Expert config', style=wx.DEFAULT_DIALOG_STYLE)
-
-		wx.EVT_CLOSE(self, self.OnClose)
-		self.panel = configBase.configPanelBase(self)
-
-		left, right, main = self.panel.CreateConfigPanel(self)
+class expertConfigPanel:
+	"Expert configuration Panel"
+	def __init__(self, cb, parent):
+		(left) = cb.CreateSimpleConfigTab(parent, 'Expert')
+		right = left
 		
 		configBase.TitleRow(left, "Accuracy")
 		c = configBase.SettingRow(left, "Extra Wall thickness for bottom/top (mm)", 'extra_base_wall_thickness', '0.0', 'Additional wall thickness of the bottom and top layers.')
@@ -65,9 +61,3 @@ class expertConfigWindow(wx.Frame):
 
 		configBase.TitleRow(right, "Hop")
 		c = configBase.SettingRow(right, "Enable hop on move", 'hop_on_move', False, 'When moving from print position to print position, raise the printer head 0.2mm so it does not knock off the print (experimental).')
-
-		main.Fit()
-		self.Fit()
-
-	def OnClose(self, e):
-		self.Destroy()

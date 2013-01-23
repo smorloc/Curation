@@ -107,9 +107,6 @@ class mainWindow(wx.Frame):
 		self.menubar.Append(toolsMenu, 'Tools')
 
 		expertMenu = wx.Menu()
-		i = expertMenu.Append(-1, 'Open expert settings...')
-		self.Bind(wx.EVT_MENU, self.OnExpertOpen, i)
-		expertMenu.AppendSeparator()
 		if firmwareInstall.getDefaultFirmware() is not None:
 			i = expertMenu.Append(-1, 'Install default Marlin firmware')
 			self.Bind(wx.EVT_MENU, self.OnDefaultMarlinFirmware, i)
@@ -120,7 +117,7 @@ class mainWindow(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.OnFirstRunWizard, i)
 		i = expertMenu.Append(-1, 'Run bed leveling wizard...')
 		self.Bind(wx.EVT_MENU, self.OnBedLevelWizard, i)
-		self.menubar.Append(expertMenu, 'Expert')
+		self.menubar.Append(expertMenu, 'System')
 
 		helpMenu = wx.Menu()
 		i = helpMenu.Append(-1, 'Online documentation...')
@@ -438,11 +435,6 @@ class mainWindow(wx.Frame):
 	def OnBedLevelWizard(self, e):
 		configWizard.bedLevelWizard()
 
-	def OnExpertOpen(self, e):
-		ecw = expertConfig.expertConfigWindow()
-		ecw.Centre()
-		ecw.Show(True)
-
 	def OnProjectPlanner(self, e):
 		pp = projectPlanner.projectPlanner()
 		pp.Centre()
@@ -498,7 +490,7 @@ class settingsPanel(configBase.configPanelBase):
 		self.SetSizer(wx.BoxSizer(wx.VERTICAL))
 		self.GetSizer().Add(nb, 1, wx.EXPAND)
 
-		(left) = self.CreateSimpleConfigTab(nb, 'Print config')
+		(left) = self.CreateSimpleConfigTab(nb, 'Basic')
 		right = left
 
 		configBase.TitleRow(left, "Quality")
@@ -543,7 +535,7 @@ class settingsPanel(configBase.configPanelBase):
 		c = configBase.SettingRow(right, "Packing Density", 'filament_density', '1.00', 'Packing density of your filament. This should be 1.00 for PLA and 0.85 for ABS')
 		validators.validFloat(c, 0.5, 1.5)
 
-		(left) = self.CreateSimpleConfigTab(nb, 'Advanced config')
+		(left) = self.CreateSimpleConfigTab(nb, 'Advanced')
 		right = left
 		
 		configBase.TitleRow(left, "Machine size")
@@ -585,6 +577,8 @@ class settingsPanel(configBase.configPanelBase):
 		validators.validFloat(c, 0.0)
 		validators.warningAbove(c, lambda : (float(profile.getProfileSetting('nozzle_size')) * 3.0 / 4.0), "A bottom layer of more then %.2fmm (3/4 nozzle size) usually give bad results and is not recommended.")
 		c = configBase.SettingRow(right, "Duplicate outlines", 'enable_skin', False, 'Skin prints the outer lines of the prints twice, each time with half the thickness. This gives the illusion of a higher print quality.')
+
+		self.expertConfigPanel = expertConfig.expertConfigPanel(self, nb)
 
 		#Plugin page
 		self.pluginPanel = pluginPanel.pluginPanel(nb)
