@@ -12,17 +12,13 @@ try:
 	import OpenGL
 
 	OpenGL.ERROR_CHECKING = False
-	from OpenGL.GLUT import *
 	from OpenGL.GLU import *
 	from OpenGL.GL import *
-	glutInit()
 
 	hasOpenGLlibs = True
 except:
 	print "Failed to find PyOpenGL: http://pyopengl.sourceforge.net/"
 	hasOpenGLlibs = False
-
-import numpy
 
 def InitGL(window, view3D, zoom):
 	# set viewing projection
@@ -73,6 +69,7 @@ def DrawMachine(machineSize):
 		if platformMesh is None:
 			try:
 				platformMesh = meshLoader.loadMesh(getPathForMesh('ultimaker_platform.stl'))
+				platformMesh.setRotateMirror(0, False, False, False, False, False)
 			except:
 				platformMesh = False
 
@@ -213,52 +210,48 @@ def DrawMachine(machineSize):
 	#X
 	glColor3f(1, 0, 0)
 	glPushMatrix()
-	glTranslate(20, 0, 0)
+	glTranslate(23, 0, 0)
 	noZ = ResetMatrixRotationAndScale()
-	glDrawStringCenter("X")
+	glBegin(GL_LINES)
+	glVertex3f(-0.8, 1, 0)
+	glVertex3f(0.8, -1, 0)
+	glVertex3f(0.8, 1, 0)
+	glVertex3f(-0.8, -1, 0)
+	glEnd()
 	glPopMatrix()
 
 	#Y
 	glColor3f(0, 1, 0)
 	glPushMatrix()
-	glTranslate(0, 20, 0)
-	glDrawStringCenter("Y")
+	glTranslate(0, 23, 0)
+	ResetMatrixRotationAndScale()
+	glBegin(GL_LINES)
+	glVertex3f(-0.8, 1, 0)
+	glVertex3f(0.0, 0, 0)
+	glVertex3f(0.8, 1, 0)
+	glVertex3f(-0.8, -1, 0)
+	glEnd()
 	glPopMatrix()
 
 	#Z
 	if not noZ:
 		glColor3f(0, 0, 1)
 		glPushMatrix()
-		glTranslate(0, 0, 20)
-		glDrawStringCenter("Z")
+		glTranslate(0, 0, 23)
+		ResetMatrixRotationAndScale()
+		glBegin(GL_LINES)
+		glVertex3f(-0.8, 1, 0)
+		glVertex3f(0.8, 1, 0)
+		glVertex3f(0.8, 1, 0)
+		glVertex3f(-0.8, -1, 0)
+		glVertex3f(-0.8, -1, 0)
+		glVertex3f(0.8, -1, 0)
+		glEnd()
 		glPopMatrix()
 
 	glPopMatrix()
 	glEnable(GL_DEPTH_TEST)
 
-def glDrawStringCenter(s):
-	glRasterPos2f(0, 0)
-	width = 0
-	for c in s:
-		width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(c))
-	glBitmap(0,0,0,0, -width/2, 0, None)
-	for c in s:
-		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(c))
-
-def unproject(winx, winy, winz, modelMatrix, projMatrix, viewport):
-	npModelMatrix = numpy.matrix(numpy.array(modelMatrix, numpy.float64).reshape((4,4)))
-	npProjMatrix = numpy.matrix(numpy.array(projMatrix, numpy.float64).reshape((4,4)))
-	finalMatrix = npModelMatrix * npProjMatrix
-	finalMatrix = numpy.linalg.inv(finalMatrix)
-
-	viewport = map(float, viewport)
-	vector = numpy.array([(winx - viewport[0]) / viewport[2] * 2.0 - 1.0, (winy - viewport[1]) / viewport[3] * 2.0 - 1.0, winz * 2.0 - 1.0, 1]).reshape((1,4))
-	vector = (numpy.matrix(vector) * finalMatrix).getA().flatten()
-	ret = list(vector)[0:3] / vector[3]
-	return ret
-
-def convert3x3MatrixTo4x4(matrix):
-	return list(matrix.getA()[0]) + [0] + list(matrix.getA()[1]) + [0] + list(matrix.getA()[2]) + [0, 0,0,0,1]
 
 def ResetMatrixRotationAndScale():
 	matrix = glGetFloatv(GL_MODELVIEW_MATRIX)
