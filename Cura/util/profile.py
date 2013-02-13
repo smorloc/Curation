@@ -212,7 +212,10 @@ def loadGlobalProfile(filename):
 	#Read a configuration file as global config
 	global globalProfileParser
 	globalProfileParser = ConfigParser.ConfigParser()
-	globalProfileParser.read(filename)
+	try:
+		globalProfileParser.read(filename)
+	except ConfigParser.ParsingError:
+		pass
 
 def resetGlobalProfile():
 	#Read a configuration file as global config
@@ -340,7 +343,10 @@ def getPreference(name):
 	global globalPreferenceParser
 	if globalPreferenceParser is None:
 		globalPreferenceParser = ConfigParser.ConfigParser()
-		globalPreferenceParser.read(getPreferencePath())
+		try:
+			globalPreferenceParser.read(getPreferencePath())
+		except ConfigParser.ParsingError:
+			pass
 	if not globalPreferenceParser.has_option('preference', name):
 		if name in preferencesDefaultSettings:
 			default = preferencesDefaultSettings[name]
@@ -360,7 +366,10 @@ def putPreference(name, value):
 	global globalPreferenceParser
 	if globalPreferenceParser == None:
 		globalPreferenceParser = ConfigParser.ConfigParser()
-		globalPreferenceParser.read(getPreferencePath())
+		try:
+			globalPreferenceParser.read(getPreferencePath())
+		except ConfigParser.ParsingError:
+			pass
 	if not globalPreferenceParser.has_section('preference'):
 		globalPreferenceParser.add_section('preference')
 	globalPreferenceParser.set('preference', name, unicode(value).encode("utf-8"))
@@ -422,7 +431,11 @@ def getMachineCenterCoords():
 	return [getPreferenceFloat('machine_width') / 2, getPreferenceFloat('machine_depth') / 2]
 
 def getObjectMatrix():
-	return map(float, getProfileSetting('model_matrix').split(','))
+	try:
+		return map(float, getProfileSetting('model_matrix').split(','))
+	except ValueError:
+		return [1,0,0, 0,1,0, 0,0,1]
+
 
 #########################################################
 ## Alteration file functions

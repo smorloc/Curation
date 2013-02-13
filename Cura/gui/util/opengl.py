@@ -191,10 +191,19 @@ def DrawMachine(machineSize):
 
 def glDrawStringCenter(s):
 	glRasterPos2f(0, 0)
+	glBitmap(0,0,0,0, -glGetStringSize(s)[0]/2, 0, None)
+	for c in s:
+		glutBitmapCharacter(OpenGL.GLUT.GLUT_BITMAP_HELVETICA_18, ord(c))
+
+def glGetStringSize(s):
 	width = 0
 	for c in s:
 		width += glutBitmapWidth(OpenGL.GLUT.GLUT_BITMAP_HELVETICA_18, ord(c))
-	glBitmap(0,0,0,0, -width/2, 0, None)
+	height = 18
+	return width, height
+
+def glDrawStringLeft(s):
+	glRasterPos2f(0, 0)
 	for c in s:
 		glutBitmapCharacter(OpenGL.GLUT.GLUT_BITMAP_HELVETICA_18, ord(c))
 
@@ -302,12 +311,15 @@ def DrawMeshOutline(mesh):
 	glDisableClientState(GL_VERTEX_ARRAY)
 
 
-def DrawMesh(mesh):
+def DrawMesh(mesh, insideOut = False):
 	glEnable(GL_CULL_FACE)
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_NORMAL_ARRAY);
 	glVertexPointer(3, GL_FLOAT, 0, mesh.vertexes)
-	glNormalPointer(GL_FLOAT, 0, mesh.normal)
+	if insideOut:
+		glNormalPointer(GL_FLOAT, 0, mesh.invNormal)
+	else:
+		glNormalPointer(GL_FLOAT, 0, mesh.normal)
 
 	#Odd, drawing in batchs is a LOT faster then drawing it all at once.
 	batchSize = 999    #Warning, batchSize needs to be dividable by 3
@@ -320,7 +332,10 @@ def DrawMesh(mesh):
 	glDrawArrays(GL_TRIANGLES, extraStartPos, extraCount)
 
 	glCullFace(GL_FRONT)
-	glNormalPointer(GL_FLOAT, 0, mesh.invNormal)
+	if insideOut:
+		glNormalPointer(GL_FLOAT, 0, mesh.normal)
+	else:
+		glNormalPointer(GL_FLOAT, 0, mesh.invNormal)
 	for i in xrange(0, int(mesh.vertexCount / batchSize)):
 		glDrawArrays(GL_TRIANGLES, i * batchSize, batchSize)
 	extraStartPos = int(mesh.vertexCount / batchSize) * batchSize
@@ -329,7 +344,7 @@ def DrawMesh(mesh):
 	glCullFace(GL_BACK)
 
 	glDisableClientState(GL_VERTEX_ARRAY)
-	glDisableClientState(GL_NORMAL_ARRAY);
+	glDisableClientState(GL_NORMAL_ARRAY)
 
 
 def DrawMeshSteep(mesh, matrix, angle):
@@ -377,13 +392,13 @@ def DrawGCodeLayer(layer):
 	lineWidth = profile.getProfileSettingFloat('nozzle_size') / 2 / 10
 
 	fillCycle = 0
-	fillColorCycle = [[0.5, 0.5, 0.0], [0.0, 0.5, 0.5], [0.5, 0.0, 0.5]]
-	moveColor = [0, 0, 1]
-	retractColor = [1, 0, 0.5]
-	supportColor = [0, 1, 1]
-	extrudeColor = [1, 0, 0]
-	innerWallColor = [0, 1, 0]
-	skirtColor = [0, 0.5, 0.5]
+	fillColorCycle = [[0.5, 0.5, 0.0, 1], [0.0, 0.5, 0.5, 1], [0.5, 0.0, 0.5, 1]]
+	moveColor = [0, 0, 1, 0.5]
+	retractColor = [1, 0, 0.5, 0.5]
+	supportColor = [0, 1, 1, 1]
+	extrudeColor = [1, 0, 0, 1]
+	innerWallColor = [0, 1, 0, 1]
+	skirtColor = [0, 0.5, 0.5, 1]
 	prevPathWasRetract = False
 
 	glDisable(GL_CULL_FACE)
@@ -408,7 +423,7 @@ def DrawGCodeLayer(layer):
 			else:
 				c = extrudeColor
 		if path.type == 'retract':
-			c = [0, 1, 1]
+			c = retractColor
 		if path.type == 'extrude':
 			drawLength = 0.0
 			prevNormal = None
@@ -432,7 +447,7 @@ def DrawGCodeLayer(layer):
 				vv1 = v1 - normal * lineWidth
 
 				glBegin(GL_QUADS)
-				glColor3fv(c)
+				glColor4fv(c)
 				glVertex3f(vv0.x, vv0.y, vv0.z - zOffset)
 				glVertex3f(vv1.x, vv1.y, vv1.z - zOffset)
 				glVertex3f(vv3.x, vv3.y, vv3.z - zOffset)
@@ -444,7 +459,7 @@ def DrawGCodeLayer(layer):
 					vv4 = v0 + n * lineWidth
 					vv5 = v0 - n * lineWidth
 					glBegin(GL_QUADS)
-					glColor3fv(c)
+					glColor4fv(c)
 					glVertex3f(vv2.x, vv2.y, vv2.z - zOffset)
 					glVertex3f(vv4.x, vv4.y, vv4.z - zOffset)
 					glVertex3f(prevVv3.x, prevVv3.y, prevVv3.z - zOffset)
@@ -461,7 +476,7 @@ def DrawGCodeLayer(layer):
 				prevVv3 = vv3
 		else:
 			glBegin(GL_LINE_STRIP)
-			glColor3fv(c)
+			glColor4fv(c)
 			for v in path.list:
 				glVertex3f(v.x, v.y, v.z)
 			glEnd()

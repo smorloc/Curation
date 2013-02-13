@@ -95,8 +95,6 @@ class previewPanel(wx.Panel):
 		self.toolbar.AddControl(self.layerSpin)
 		self.Bind(wx.EVT_SPINCTRL, self.OnLayerNrChange, self.layerSpin)
 
-		self.OnViewChange()
-		
 		sizer = wx.BoxSizer(wx.VERTICAL)
 		sizer.Add(self.toolbar, 0, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT, border=1)
 		sizer.Add(self.glCanvas, 1, flag=wx.EXPAND)
@@ -106,53 +104,122 @@ class previewPanel(wx.Panel):
 		self.Bind(wx.EVT_TIMER, self.OnCheckReloadFile, self.checkReloadFileTimer)
 		self.checkReloadFileTimer.Start(1000)
 
-		self.infoToolButton   = openglGui.glButton(self.glCanvas, 0, 'Info', 0,0, self.OnInfoSelect)
-		self.rotateToolButton = openglGui.glButton(self.glCanvas, 1, 'Rotate', 0,1, self.OnRotateSelect)
-		self.scaleToolButton  = openglGui.glButton(self.glCanvas, 2, 'Scale', 0,2, self.OnScaleSelect)
+		group = []
+		self.rotateToolButton = openglGui.glRadioButton(self.glCanvas, 1, 'Rotate', (0,1), group, self.OnToolSelect)
+		self.scaleToolButton  = openglGui.glRadioButton(self.glCanvas, 2, 'Scale', (0,2), group, self.OnToolSelect)
+		self.mirrorToolButton  = openglGui.glRadioButton(self.glCanvas, 12, 'Mirror', (0,3), group, self.OnToolSelect)
 
-		self.resetRotationButton = openglGui.glButton(self.glCanvas, 4, 'Reset rotation', 1,0, self.OnRotateReset)
-		self.layFlatButton       = openglGui.glButton(self.glCanvas, 5, 'Lay flat', 2,0, self.OnLayFlat)
+		self.resetRotationButton = openglGui.glButton(self.glCanvas, 4, 'Reset rotation', (1,1), self.OnRotateReset)
+		self.layFlatButton       = openglGui.glButton(self.glCanvas, 5, 'Lay flat', (1,2), self.OnLayFlat)
 
-		self.resetScaleButton    = openglGui.glButton(self.glCanvas, 8, 'Scale reset', 1,0, self.OnScaleReset)
-		self.scaleMaxButton      = openglGui.glButton(self.glCanvas, 9, 'Scale to machine size', 2,0, self.OnScaleMax)
+		self.resetScaleButton    = openglGui.glButton(self.glCanvas, 8, 'Scale reset', (1,1), self.OnScaleReset)
+		self.scaleMaxButton      = openglGui.glButton(self.glCanvas, 9, 'Scale to machine size', (1,2), self.OnScaleMax)
 
-		self.openFileButton      = openglGui.glButton(self.glCanvas, 3, 'Load file', -1,0, lambda : self.GetParent().GetParent().GetParent()._showModelLoadDialog(1))
+		self.mirrorXButton       = openglGui.glButton(self.glCanvas, 12, 'Mirror X', (1,1), lambda : self.OnMirror(0))
+		self.mirrorYButton       = openglGui.glButton(self.glCanvas, 13, 'Mirror Y', (1,2), lambda : self.OnMirror(1))
+		self.mirrorZButton       = openglGui.glButton(self.glCanvas, 14, 'Mirror Z', (1,3), lambda : self.OnMirror(2))
 
-		self.infoToolButton.setSelected(True)
+		self.openFileButton      = openglGui.glButton(self.glCanvas, 3, 'Load model', (0,0), lambda : self.GetParent().GetParent().GetParent()._showModelLoadDialog(1))
+		self.sliceButton         = openglGui.glButton(self.glCanvas, 6, 'Prepare model', (0,-2), lambda : self.GetParent().GetParent().GetParent().OnSlice(None))
+		self.printButton         = openglGui.glButton(self.glCanvas, 7, 'Print model', (0,-1), lambda : self.GetParent().GetParent().GetParent().OnPrint(None))
+
+		extruderCount = int(profile.getPreference('extruder_amount'))
+		if extruderCount > 1:
+			openglGui.glButton(self.glCanvas, 3, 'Load dual model', (1,0), lambda : self.GetParent().GetParent().GetParent()._showModelLoadDialog(2))
+		if extruderCount > 2:
+			openglGui.glButton(self.glCanvas, 3, 'Load triple model', (2,0), lambda : self.GetParent().GetParent().GetParent()._showModelLoadDialog(3))
+		if extruderCount > 3:
+			openglGui.glButton(self.glCanvas, 3, 'Load quad model', (3,0), lambda : self.GetParent().GetParent().GetParent()._showModelLoadDialog(4))
+
+		self.scaleForm = openglGui.glFrame(self.glCanvas, (1, 3))
+		openglGui.glGuiLayoutGrid(self.scaleForm)
+		openglGui.glLabel(self.scaleForm, 'Scale X', (0,0))
+		self.scaleXctrl = openglGui.glNumberCtrl(self.scaleForm, '1.0', (1,0), lambda value: self.OnScaleEntry(value, 0))
+		openglGui.glLabel(self.scaleForm, 'Scale Y', (0,1))
+		self.scaleYctrl = openglGui.glNumberCtrl(self.scaleForm, '1.0', (1,1), lambda value: self.OnScaleEntry(value, 1))
+		openglGui.glLabel(self.scaleForm, 'Scale Z', (0,2))
+		self.scaleZctrl = openglGui.glNumberCtrl(self.scaleForm, '1.0', (1,2), lambda value: self.OnScaleEntry(value, 2))
+		openglGui.glLabel(self.scaleForm, 'Size X (mm)', (0,4))
+		self.scaleXmmctrl = openglGui.glNumberCtrl(self.scaleForm, '0.0', (1,4), lambda value: self.OnScaleEntryMM(value, 0))
+		openglGui.glLabel(self.scaleForm, 'Size Y (mm)', (0,5))
+		self.scaleYmmctrl = openglGui.glNumberCtrl(self.scaleForm, '0.0', (1,5), lambda value: self.OnScaleEntryMM(value, 1))
+		openglGui.glLabel(self.scaleForm, 'Size Z (mm)', (0,6))
+		self.scaleZmmctrl = openglGui.glNumberCtrl(self.scaleForm, '0.0', (1,6), lambda value: self.OnScaleEntryMM(value, 2))
+		openglGui.glLabel(self.scaleForm, 'Uniform scale', (0,8))
+		self.scaleUniform = openglGui.glCheckbox(self.scaleForm, True, (1,8), None)
+
+		self.OnViewChange()
+		self.OnToolSelect()
 		self.returnToModelViewAndUpdateModel()
 
 		self.matrix = numpy.matrix(numpy.array(profile.getObjectMatrix(), numpy.float64).reshape((3,3,)))
-		self.tool = previewTools.toolInfo(self.glCanvas)
 
 	def returnToModelViewAndUpdateModel(self):
 		if self.glCanvas.viewMode == 'GCode' or self.glCanvas.viewMode == 'Mixed':
 			self.setViewMode('Normal')
+		self.updateModelTransform()
+
+	def OnToolSelect(self):
+		if self.rotateToolButton.getSelected():
+			self.tool = previewTools.toolRotate(self.glCanvas)
+		elif self.scaleToolButton.getSelected():
+			self.tool = previewTools.toolScale(self.glCanvas)
+		elif self.mirrorToolButton.getSelected():
+			self.tool = previewTools.toolNone(self.glCanvas)
+		else:
+			self.tool = previewTools.toolNone(self.glCanvas)
 		self.resetRotationButton.setHidden(not self.rotateToolButton.getSelected())
 		self.layFlatButton.setHidden(not self.rotateToolButton.getSelected())
 		self.resetScaleButton.setHidden(not self.scaleToolButton.getSelected())
 		self.scaleMaxButton.setHidden(not self.scaleToolButton.getSelected())
+		self.scaleForm.setHidden(not self.scaleToolButton.getSelected())
+		self.mirrorXButton.setHidden(not self.mirrorToolButton.getSelected())
+		self.mirrorYButton.setHidden(not self.mirrorToolButton.getSelected())
+		self.mirrorZButton.setHidden(not self.mirrorToolButton.getSelected())
+		self.returnToModelViewAndUpdateModel()
+
+	def OnScaleEntry(self, value, axis):
+		try:
+			value = float(value)
+		except:
+			return
+		scale = numpy.linalg.norm(self.matrix[::,axis].getA().flatten())
+		scale = value / scale
+		if scale == 0:
+			return
+		if self.scaleUniform.getValue():
+			matrix = [[scale,0,0], [0, scale, 0], [0, 0, scale]]
+		else:
+			matrix = [[1.0,0,0], [0, 1.0, 0], [0, 0, 1.0]]
+			matrix[axis][axis] = scale
+		self.matrix *= numpy.matrix(matrix, numpy.float64)
 		self.updateModelTransform()
 
-	def OnInfoSelect(self):
-		self.infoToolButton.setSelected(True)
-		self.rotateToolButton.setSelected(False)
-		self.scaleToolButton.setSelected(False)
-		self.tool = previewTools.toolInfo(self.glCanvas)
-		self.returnToModelViewAndUpdateModel()
+	def OnScaleEntryMM(self, value, axis):
+		try:
+			value = float(value)
+		except:
+			return
+		scale = self.objectsSize[axis]
+		scale = value / scale
+		if scale == 0:
+			return
+		if self.scaleUniform.getValue():
+			matrix = [[scale,0,0], [0, scale, 0], [0, 0, scale]]
+		else:
+			matrix = [[1,0,0], [0, 1, 0], [0, 0, 1]]
+			matrix[axis][axis] = scale
+		self.matrix *= numpy.matrix(matrix, numpy.float64)
+		self.updateModelTransform()
 
-	def OnRotateSelect(self):
-		self.infoToolButton.setSelected(False)
-		self.rotateToolButton.setSelected(True)
-		self.scaleToolButton.setSelected(False)
-		self.tool = previewTools.toolRotate(self.glCanvas)
-		self.returnToModelViewAndUpdateModel()
-
-	def OnScaleSelect(self):
-		self.infoToolButton.setSelected(False)
-		self.rotateToolButton.setSelected(False)
-		self.scaleToolButton.setSelected(True)
-		self.tool = previewTools.toolScale(self.glCanvas)
-		self.returnToModelViewAndUpdateModel()
+	def OnMirror(self, axis):
+		matrix = [[1,0,0], [0, 1, 0], [0, 0, 1]]
+		matrix[axis][axis] = -1
+		self.matrix *= numpy.matrix(matrix, numpy.float64)
+		for obj in self.objectList:
+			obj.dirty = True
+			obj.steepDirty = True
+		self.updateModelTransform()
 
 	def OnMove(self, e = None):
 		if e is not None:
@@ -183,18 +250,18 @@ class previewPanel(wx.Panel):
 		self.updateModelTransform()
 
 	def OnRotateReset(self):
-		x = numpy.linalg.norm(self.matrix[0].getA().flatten())
-		y = numpy.linalg.norm(self.matrix[1].getA().flatten())
-		z = numpy.linalg.norm(self.matrix[2].getA().flatten())
+		x = numpy.linalg.norm(self.matrix[::,0].getA().flatten())
+		y = numpy.linalg.norm(self.matrix[::,1].getA().flatten())
+		z = numpy.linalg.norm(self.matrix[::,2].getA().flatten())
 		self.matrix = numpy.matrix([[x,0,0],[0,y,0],[0,0,z]], numpy.float64)
 		for obj in self.objectList:
 			obj.steepDirty = True
 		self.updateModelTransform()
 
 	def OnScaleReset(self):
-		x = 1/numpy.linalg.norm(self.matrix[0].getA().flatten())
-		y = 1/numpy.linalg.norm(self.matrix[1].getA().flatten())
-		z = 1/numpy.linalg.norm(self.matrix[2].getA().flatten())
+		x = 1/numpy.linalg.norm(self.matrix[::,0].getA().flatten())
+		y = 1/numpy.linalg.norm(self.matrix[::,1].getA().flatten())
+		z = 1/numpy.linalg.norm(self.matrix[::,2].getA().flatten())
 		self.matrix *= numpy.matrix([[x,0,0],[0,y,0],[0,0,z]], numpy.float64)
 		for obj in self.objectList:
 			obj.steepDirty = True
@@ -306,6 +373,15 @@ class previewPanel(wx.Panel):
 			if obj.filename is not None and os.path.isfile(obj.filename) and obj.fileTime != os.stat(obj.filename).st_mtime:
 				self.checkReloadFileTimer.Stop()
 				self.ShowWarningPopup('File changed, reload?', self.reloadModelFiles)
+		if wx.TheClipboard.Open():
+			data = wx.TextDataObject()
+			if wx.TheClipboard.GetData(data):
+				data = data.GetText()
+				if re.match('^http://.*/.*$', data):
+					if data.endswith(tuple(meshLoader.supportedExtensions())):
+						#Got an url on the clipboard with a model file.
+						pass
+			wx.TheClipboard.Close()
 	
 	def reloadModelFiles(self, filelist = None):
 		if filelist is not None:
@@ -395,6 +471,7 @@ class previewPanel(wx.Panel):
 		self.gcodeViewButton.Show(self.gcode is not None)
 		self.mixedViewButton.Show(self.gcode is not None)
 		self.layerSpin.Show(self.glCanvas.viewMode == "GCode" or self.glCanvas.viewMode == "Mixed")
+		self.printButton.setDisabled(self.gcode is None)
 		if self.gcode is not None:
 			self.layerSpin.SetRange(1, len(self.gcode.layerList) - 1)
 		self.toolbar.Realize()
@@ -443,6 +520,16 @@ class previewPanel(wx.Panel):
 		self.objectsMinV = minV
 		self.objectsSize = self.objectsMaxV - self.objectsMinV
 		self.objectsBoundaryCircleSize = objectsBoundaryCircleSize
+
+		scaleX = numpy.linalg.norm(self.matrix[::,0].getA().flatten())
+		scaleY = numpy.linalg.norm(self.matrix[::,1].getA().flatten())
+		scaleZ = numpy.linalg.norm(self.matrix[::,2].getA().flatten())
+		self.scaleXctrl.setValue(round(scaleX, 2))
+		self.scaleYctrl.setValue(round(scaleY, 2))
+		self.scaleZctrl.setValue(round(scaleZ, 2))
+		self.scaleXmmctrl.setValue(round(self.objectsSize[0], 2))
+		self.scaleYmmctrl.setValue(round(self.objectsSize[1], 2))
+		self.scaleZmmctrl.setValue(round(self.objectsSize[2], 2))
 
 		self.glCanvas.Refresh()
 	
@@ -561,6 +648,7 @@ class PreviewGLCanvas(openglGui.glGuiPanel):
 		opengl.InitGL(self, self.view3D, self.zoom)
 		if self.view3D:
 			glTranslate(0,0,-self.zoom)
+			glTranslate(self.zoom/20.0,0,0)
 			glRotate(-self.pitch, 1,0,0)
 			glRotate(self.yaw, 0,0,1)
 
@@ -610,7 +698,7 @@ class PreviewGLCanvas(openglGui.glGuiPanel):
 			if obj.dirty:
 				obj.dirty = False
 				glNewList(obj.displayList, GL_COMPILE)
-				opengl.DrawMesh(obj.mesh)
+				opengl.DrawMesh(obj.mesh, numpy.linalg.det(obj.mesh.matrix) < 0)
 				glEndList()
 				glNewList(obj.outlineDisplayList, GL_COMPILE)
 				opengl.DrawMeshOutline(obj.mesh)
