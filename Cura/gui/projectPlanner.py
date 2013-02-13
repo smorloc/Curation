@@ -9,16 +9,10 @@ import shutil
 import ConfigParser
 import numpy
 
-from wx import glcanvas
-try:
-	import OpenGL
-	OpenGL.ERROR_CHECKING = False
-	from OpenGL.GLU import *
-	from OpenGL.GL import *
-	hasOpenGLlibs = True
-except:
-	print "Failed to find PyOpenGL: http://pyopengl.sourceforge.net/"
-	hasOpenGLlibs = False
+import OpenGL
+OpenGL.ERROR_CHECKING = False
+from OpenGL.GLU import *
+from OpenGL.GL import *
 
 from Cura.gui.util import opengl
 from Cura.gui.util import toolbarUtil
@@ -26,11 +20,13 @@ from Cura.gui import configBase
 from Cura.gui import printWindow
 from Cura.gui.util import dropTarget
 from Cura.gui.util import taskbar
+from Cura.gui.util import previewTools
+from Cura.gui.util import openglGui
 from Cura.util import validators
 from Cura.util import profile
 from Cura.util import util3d
 from Cura.util import meshLoader
-from Cura.util import stl
+from Cura.util.meshLoaders import stl
 from Cura.util import mesh
 from Cura.util import sliceRun
 from Cura.util import gcodeInterpreter
@@ -47,67 +43,38 @@ class ProjectObject(object):
 
 		self.parent = parent
 		self.filename = filename
-		self.scale = 1.0
-		self.rotate = 0.0
-		self.flipX = False
-		self.flipY = False
-		self.flipZ = False
-		self.swapXZ = False
-		self.swapYZ = False
-		self.extruder = 0
+		self.matrix = numpy.matrix([[1,0,0],[0,1,0],[0,0,1]], numpy.float64)
 		self.profile = None
 		
 		self.modelDisplayList = None
-		self.modelDirty = False
+		self.modelDirty = True
 
-		self.mesh.getMinimumZ()
-		
-		self.centerX = -self.getMinimum()[0] + 5
-		self.centerY = -self.getMinimum()[1] + 5
-		
-		self.updateModelTransform()
+		self.centerX = self.getSize()[0]/2 + 5
+		self.centerY = self.getSize()[1]/2 + 5
 
-		self.centerX = -self.getMinimum()[0] + 5
-		self.centerY = -self.getMinimum()[1] + 5
+		self.updateMatrix()
 
 	def isSameExceptForPosition(self, other):
 		if self.filename != other.filename:
 			return False
-		if self.scale != other.scale:
-			return False
-		if self.rotate != other.rotate:
-			return False
-		if self.flipX != other.flipX:
-			return False
-		if self.flipY != other.flipY:
-			return False
-		if self.flipZ != other.flipZ:
-			return False
-		if self.swapXZ != other.swapXZ:
-			return False
-		if self.swapYZ != other.swapYZ:
-			return False
-		if self.extruder != other.extruder:
+		if self.matrix != other.matrix:
 			return False
 		if self.profile != other.profile:
 			return False
 		return True
 
-	def updateModelTransform(self):
-		self.mesh.setRotateMirror(self.rotate, self.flipX, self.flipY, self.flipZ, self.swapXZ, self.swapYZ)
-		minZ = self.mesh.getMinimumZ()
-		minV = self.getMinimum()
-		maxV = self.getMaximum()
-		self.mesh.vertexes -= numpy.array([minV[0] + (maxV[0] - minV[0]) / 2, minV[1] + (maxV[1] - minV[1]) / 2, minZ])
-		minZ = self.mesh.getMinimumZ()
-		self.modelDirty = True
-	
+	def updateMatrix(self):
+		self.mesh.matrix = self.matrix
+		self.mesh.processMatrix()
+
 	def getMinimum(self):
 		return self.mesh.getMinimum()
 	def getMaximum(self):
 		return self.mesh.getMaximum()
 	def getSize(self):
 		return self.mesh.getSize()
+	def getBoundaryCircle(self):
+		return self.mesh.bounderyCircleSize
 	
 	def clone(self):
 		p = ProjectObject(self.parent, self.filename)
@@ -116,29 +83,23 @@ class ProjectObject(object):
 		p.centerY = self.centerY + 5
 		
 		p.filename = self.filename
-		p.scale = self.scale
-		p.rotate = self.rotate
-		p.flipX = self.flipX
-		p.flipY = self.flipY
-		p.flipZ = self.flipZ
-		p.swapXZ = self.swapXZ
-		p.swapYZ = self.swapYZ
-		p.extruder = self.extruder
+		p.matrix = self.matrix.copy()
 		p.profile = self.profile
 		
-		p.updateModelTransform()
+		p.updateMatrix()
 		
 		return p
 	
 	def clampXY(self):
-		if self.centerX < -self.getMinimum()[0] * self.scale + self.parent.extruderOffset[self.extruder][0]:
-			self.centerX = -self.getMinimum()[0] * self.scale + self.parent.extruderOffset[self.extruder][0]
-		if self.centerY < -self.getMinimum()[1] * self.scale + self.parent.extruderOffset[self.extruder][1]:
-			self.centerY = -self.getMinimum()[1] * self.scale + self.parent.extruderOffset[self.extruder][1]
-		if self.centerX > self.parent.machineSize[0] + self.parent.extruderOffset[self.extruder][0] - self.getMaximum()[0] * self.scale:
-			self.centerX = self.parent.machineSize[0] + self.parent.extruderOffset[self.extruder][0] - self.getMaximum()[0] * self.scale
-		if self.centerY > self.parent.machineSize[1] + self.parent.extruderOffset[self.extruder][1] - self.getMaximum()[1] * self.scale:
-			self.centerY = self.parent.machineSize[1] + self.parent.extruderOffset[self.extruder][1] - self.getMaximum()[1] * self.scale
+		size = self.getSize()
+		if self.centerX < size[0] / 2:
+			self.centerX = size[0] / 2
+		if self.centerY < size[1] / 2:
+			self.centerY = size[1] / 2
+		if self.centerX > self.parent.machineSize[0] - size[0] / 2:
+			self.centerX = self.parent.machineSize[0] - size[0] / 2
+		if self.centerY > self.parent.machineSize[1] - size[1] / 2:
+			self.centerY = self.parent.machineSize[1] - size[1] / 2
 
 class projectPlanner(wx.Frame):
 	"Main user interface window"
@@ -204,20 +165,9 @@ class projectPlanner(wx.Frame):
 		toolbarUtil.NormalButton(self.toolbar2, self.OnSlice, 'slice.png', 'Prepare to project into a gcode file.')
 		self.toolbar2.Realize()
 
-		self.toolbar3 = toolbarUtil.Toolbar(self.panel)
-		self.mirrorX = toolbarUtil.ToggleButton(self.toolbar3, 'flip_x', 'object-mirror-x-on.png', 'object-mirror-x-off.png', 'Mirror X', callback=self.OnMirrorChange)
-		self.mirrorY = toolbarUtil.ToggleButton(self.toolbar3, 'flip_y', 'object-mirror-y-on.png', 'object-mirror-y-off.png', 'Mirror Y', callback=self.OnMirrorChange)
-		self.mirrorZ = toolbarUtil.ToggleButton(self.toolbar3, 'flip_z', 'object-mirror-z-on.png', 'object-mirror-z-off.png', 'Mirror Z', callback=self.OnMirrorChange)
-		self.toolbar3.AddSeparator()
-
-		# Swap
-		self.swapXZ = toolbarUtil.ToggleButton(self.toolbar3, 'swap_xz', 'object-swap-xz-on.png', 'object-swap-xz-off.png', 'Swap XZ', callback=self.OnMirrorChange)
-		self.swapYZ = toolbarUtil.ToggleButton(self.toolbar3, 'swap_yz', 'object-swap-yz-on.png', 'object-swap-yz-off.png', 'Swap YZ', callback=self.OnMirrorChange)
-		self.toolbar3.Realize()
-		
 		sizer = wx.GridBagSizer(2,2)
 		self.panel.SetSizer(sizer)
-		self.preview = PreviewGLCanvas(self.panel, self)
+		self.glCanvas = PreviewGLCanvas(self.panel, self)
 		self.listbox = wx.ListBox(self.panel, -1, choices=[])
 		self.addButton = wx.Button(self.panel, -1, "Add")
 		self.remButton = wx.Button(self.panel, -1, "Remove")
@@ -227,14 +177,13 @@ class projectPlanner(wx.Frame):
 		
 		sizer.Add(self.toolbar, (0,0), span=(1,1), flag=wx.EXPAND|wx.LEFT|wx.RIGHT)
 		sizer.Add(self.toolbar2, (0,1), span=(1,2), flag=wx.EXPAND|wx.LEFT|wx.RIGHT)
-		sizer.Add(self.preview, (1,0), span=(5,1), flag=wx.EXPAND)
+		sizer.Add(self.glCanvas, (1,0), span=(5,1), flag=wx.EXPAND)
 		sizer.Add(self.listbox, (1,1), span=(1,2), flag=wx.EXPAND)
-		sizer.Add(self.toolbar3, (2,1), span=(1,2), flag=wx.EXPAND|wx.LEFT|wx.RIGHT)
-		sizer.Add(self.addButton, (3,1), span=(1,1))
-		sizer.Add(self.remButton, (3,2), span=(1,1))
-		sizer.Add(self.sliceButton, (4,1), span=(1,1))
+		sizer.Add(self.addButton, (2,1), span=(1,1))
+		sizer.Add(self.remButton, (2,2), span=(1,1))
+		sizer.Add(self.sliceButton, (3,1), span=(1,1))
 		if not self.alwaysAutoPlace:
-			sizer.Add(self.autoPlaceButton, (4,2), span=(1,1))
+			sizer.Add(self.autoPlaceButton, (3,2), span=(1,1))
 		sizer.AddGrowableCol(0)
 		sizer.AddGrowableRow(1)
 		
@@ -251,25 +200,34 @@ class projectPlanner(wx.Frame):
 		sizer = wx.GridBagSizer(2,2)
 		panel.SetSizer(sizer)
 		
-		self.scaleCtrl = wx.TextCtrl(panel, -1, '')
-		self.rotateCtrl = wx.SpinCtrl(panel, -1, '', size=(21*4,21), style=wx.SP_ARROW_KEYS)
-		self.rotateCtrl.SetRange(0, 360)
-
-		sizer.Add(wx.StaticText(panel, -1, 'Scale'), (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
-		sizer.Add(self.scaleCtrl, (0,1), flag=wx.ALIGN_BOTTOM|wx.EXPAND)
-		sizer.Add(wx.StaticText(panel, -1, 'Rotate'), (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
-		sizer.Add(self.rotateCtrl, (1,1), flag=wx.ALIGN_BOTTOM|wx.EXPAND)
-
-		if int(profile.getPreference('extruder_amount')) > 1:
-			self.extruderCtrl = wx.ComboBox(panel, -1, '1', choices=map(str, range(1, int(profile.getPreference('extruder_amount'))+1)), style=wx.CB_DROPDOWN|wx.CB_READONLY)
-			sizer.Add(wx.StaticText(panel, -1, 'Extruder'), (2,0), flag=wx.ALIGN_CENTER_VERTICAL)
-			sizer.Add(self.extruderCtrl, (2,1), flag=wx.ALIGN_BOTTOM|wx.EXPAND)
-			self.extruderCtrl.Bind(wx.EVT_COMBOBOX, self.OnExtruderChange)
-
-		self.scaleCtrl.Bind(wx.EVT_TEXT, self.OnScaleChange)
-		self.rotateCtrl.Bind(wx.EVT_SPINCTRL, self.OnRotateChange)
+		self.infoToolButton   = openglGui.glButton(self.glCanvas, 0, 'Info', 0,0, self.OnInfoSelect)
+		self.rotateToolButton = openglGui.glButton(self.glCanvas, 1, 'Rotate', 0,1, self.OnRotateSelect)
+		self.scaleToolButton  = openglGui.glButton(self.glCanvas, 2, 'Scale', 0,2, self.OnScaleSelect)
 
 		self.SetSize((800,600))
+
+		self.tool = previewTools.toolInfo(self.glCanvas)
+
+	def OnInfoSelect(self):
+		self.infoToolButton.setSelected(True)
+		self.rotateToolButton.setSelected(False)
+		self.scaleToolButton.setSelected(False)
+		self.tool = previewTools.toolInfo(self.glCanvas)
+		self.glCanvas.Refresh()
+
+	def OnRotateSelect(self):
+		self.infoToolButton.setSelected(False)
+		self.rotateToolButton.setSelected(True)
+		self.scaleToolButton.setSelected(False)
+		self.tool = previewTools.toolRotate(self.glCanvas)
+		self.glCanvas.Refresh()
+
+	def OnScaleSelect(self):
+		self.infoToolButton.setSelected(False)
+		self.rotateToolButton.setSelected(False)
+		self.scaleToolButton.setSelected(True)
+		self.tool = previewTools.toolScale(self.glCanvas)
+		self.glCanvas.Refresh()
 
 	def OnClose(self, e):
 		self.Destroy()
@@ -299,7 +257,7 @@ class projectPlanner(wx.Frame):
 				self._updateListbox()
 				self.OnListSelect(None)
 			pd.Destroy()
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 		dlg.Destroy()
 	
 	def OnDropFiles(self, filenames):
@@ -310,7 +268,7 @@ class projectPlanner(wx.Frame):
 			self.selection = item
 			self._updateListbox()
 		self.OnListSelect(None)
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 
 	def OnPrintTypeChange(self):
 		self.printMode = 0
@@ -318,7 +276,7 @@ class projectPlanner(wx.Frame):
 			self.printMode = 1
 		if self.alwaysAutoPlace:
 			self.OnAutoPlace(None)
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 	
 	def OnSaveCombinedSTL(self, e):
 		dlg=wx.FileDialog(self, "Save as STL", os.path.split(profile.getPreference('lastFile'))[0], style=wx.FD_SAVE)
@@ -334,10 +292,13 @@ class projectPlanner(wx.Frame):
 		output = mesh.mesh()
 		output._prepareVertexCount(totalCount)
 		for item in self.list:
-			offset = numpy.array([item.centerX, item.centerY, 0])
-			for v in item.mesh.vertexes:
-				v0 = v * item.scale + offset
-				output.addVertex(v0[0], v0[1], v0[2])
+			vMin = item.getMinimum()
+			vMax = item.getMaximum()
+			offset = - vMin - (vMax - vMin) / 2
+			offset += numpy.array([item.centerX, item.centerY, 0])
+			vertexes = (item.mesh.vertexes * item.matrix).getA() + offset
+			for v in vertexes:
+				output.addVertex(v[0], v[1], v[2])
 		stl.saveAsSTL(output, filename)
 	
 	def OnSaveProject(self, e):
@@ -399,39 +360,29 @@ class projectPlanner(wx.Frame):
 			self.selected = self.list[0]
 			self._updateListbox()			
 			self.OnListSelect(None)
-			self.preview.Refresh()
+			self.glCanvas.Refresh()
 
 		dlg.Destroy()
 
 	def On3DClick(self):
-		self.preview.yaw = 30
-		self.preview.pitch = 60
-		self.preview.zoom = 300
-		self.preview.view3D = True
-		self.preview.Refresh()
+		self.glCanvas.yaw = 30
+		self.glCanvas.pitch = 60
+		self.glCanvas.zoom = 300
+		self.glCanvas.view3D = True
+		self.glCanvas.Refresh()
 
 	def OnTopClick(self):
-		self.preview.view3D = False
-		self.preview.zoom = self.machineSize[0] / 2 + 10
-		self.preview.offsetX = 0
-		self.preview.offsetY = 0
-		self.preview.Refresh()
+		self.glCanvas.view3D = False
+		self.glCanvas.zoom = self.machineSize[0] / 2 + 10
+		self.glCanvas.offsetX = 0
+		self.glCanvas.offsetY = 0
+		self.glCanvas.Refresh()
 
 	def OnListSelect(self, e):
 		if self.listbox.GetSelection() == -1:
 			return
 		self.selection = self.list[self.listbox.GetSelection()]
-		self.scaleCtrl.SetValue(str(self.selection.scale))
-		self.rotateCtrl.SetValue(int(self.selection.rotate))
-		if int(profile.getPreference('extruder_amount')) > 1:
-			self.extruderCtrl.SetValue(str(self.selection.extruder+1))
-		self.mirrorX.SetValue(self.selection.flipX)
-		self.mirrorY.SetValue(self.selection.flipY)
-		self.mirrorZ.SetValue(self.selection.flipZ)
-		self.swapXZ.SetValue(self.selection.swapXZ)
-		self.swapYZ.SetValue(self.selection.swapYZ)
-		
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 	
 	def OnAddModel(self, e):
 		dlg=wx.FileDialog(self, "Open file to print", os.path.split(profile.getPreference('lastFile'))[0], style=wx.FD_OPEN|wx.FD_FILE_MUST_EXIST|wx.FD_MULTIPLE)
@@ -444,7 +395,7 @@ class projectPlanner(wx.Frame):
 				self.selection = item
 				self._updateListbox()
 				self.OnListSelect(None)
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 		dlg.Destroy()
 	
 	def OnRemModel(self, e):
@@ -452,7 +403,7 @@ class projectPlanner(wx.Frame):
 			return
 		self.list.remove(self.selection)
 		self._updateListbox()
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 	
 	def OnMoveUp(self, e):
 		if self.selection is None:
@@ -463,7 +414,7 @@ class projectPlanner(wx.Frame):
 		self.list.remove(self.selection)
 		self.list.insert(i-1, self.selection)
 		self._updateListbox()
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 
 	def OnMoveDown(self, e):
 		if self.selection is None:
@@ -474,7 +425,7 @@ class projectPlanner(wx.Frame):
 		self.list.remove(self.selection)
 		self.list.insert(i+1, self.selection)
 		self._updateListbox()
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 	
 	def OnCopy(self, e):
 		if self.selection is None:
@@ -485,7 +436,7 @@ class projectPlanner(wx.Frame):
 		self.selection = item
 		
 		self._updateListbox()
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 	
 	def OnSetCustomProfile(self, e):
 		if self.selection is None:
@@ -530,7 +481,7 @@ class projectPlanner(wx.Frame):
 		if not self.alwaysAutoPlace:
 			for item in self.list:
 				item.clampXY()
-		self.preview.Refresh()
+		self.glCanvas.Refresh()
 	
 	def _doAutoPlace(self, allowedSizeY):
 		extraSizeMin, extraSizeMax = self.getExtraHeadSize()
@@ -549,21 +500,21 @@ class projectPlanner(wx.Frame):
 		maxX = 0
 		maxY = 0
 		for item in self.list:
-			item.centerX = posX + item.getMaximum()[0] * item.scale * dirX
-			item.centerY = posY + item.getMaximum()[1] * item.scale * dirY
+			item.centerX = posX + item.getSize()[0] / 2 * dirX
+			item.centerY = posY + item.getSize()[1] / 2 * dirY
 			if item.centerY + item.getSize()[1] >= allowedSizeY:
 				if dirX < 0:
 					posX = minX - extraSizeMax[0] - 1
 				else:
 					posX = maxX + extraSizeMin[0] + 1
 				posY = 0
-				item.centerX = posX + item.getMaximum()[0] * item.scale * dirX
-				item.centerY = posY + item.getMaximum()[1] * item.scale * dirY
-			posY += item.getSize()[1]  * item.scale * dirY + extraSizeMin[1] + 1
-			minX = min(minX, item.centerX - item.getSize()[0] * item.scale / 2)
-			minY = min(minY, item.centerY - item.getSize()[1] * item.scale / 2)
-			maxX = max(maxX, item.centerX + item.getSize()[0] * item.scale / 2)
-			maxY = max(maxY, item.centerY + item.getSize()[1] * item.scale / 2)
+				item.centerX = posX + item.getSize()[0] / 2 * dirX
+				item.centerY = posY + item.getSize()[1] / 2 * dirY
+			posY += item.getSize()[1]  * dirY + extraSizeMin[1] + 1
+			minX = min(minX, item.centerX - item.getSize()[0] / 2)
+			minY = min(minY, item.centerY - item.getSize()[1] / 2)
+			maxX = max(maxX, item.centerX + item.getSize()[0] / 2)
+			maxY = max(maxY, item.centerY + item.getSize()[1] / 2)
 		
 		for item in self.list:
 			if dirX < 0:
@@ -598,7 +549,8 @@ class projectPlanner(wx.Frame):
 					pos = [item.centerX - self.machineSize[0] / 2, item.centerY - self.machineSize[1] / 2]
 				else:
 					pos = [item.centerX, item.centerY]
-				positionList.append(pos + (item.mesh.matrix * item.scale).reshape((9,)).tolist())
+				positionList.append(pos + item.matrix.getA().flatten().tolist())
+			print positionList
 			sliceCommand = sliceRun.getSliceCommand(resultFilename, fileList, positionList)
 		else:
 			self._saveCombinedSTL(resultFilename + "_temp_.stl")
@@ -607,45 +559,6 @@ class projectPlanner(wx.Frame):
 		pspw = ProjectSliceProgressWindow(sliceCommand, resultFilename, len(self.list))
 		pspw.Centre()
 		pspw.Show(True)
-
-	def OnScaleChange(self, e):
-		if self.selection is None:
-			return
-		try:
-			self.selection.scale = float(self.scaleCtrl.GetValue())
-		except ValueError:
-			self.selection.scale = 1.0
-		if self.alwaysAutoPlace:
-			self.OnAutoPlace(None)
-		self.preview.Refresh()
-	
-	def OnRotateChange(self, e):
-		if self.selection is None:
-			return
-		self.selection.rotate = float(self.rotateCtrl.GetValue())
-		self.selection.updateModelTransform()
-		if self.alwaysAutoPlace:
-			self.OnAutoPlace(None)
-		self.preview.Refresh()
-
-	def OnExtruderChange(self, e):
-		if self.selection is None:
-			return
-		self.selection.extruder = int(self.extruderCtrl.GetValue()) - 1
-		self.preview.Refresh()
-		
-	def OnMirrorChange(self):
-		if self.selection is None:
-			return
-		self.selection.flipX = self.mirrorX.GetValue()
-		self.selection.flipY = self.mirrorY.GetValue()
-		self.selection.flipZ = self.mirrorZ.GetValue()
-		self.selection.swapXZ = self.swapXZ.GetValue()
-		self.selection.swapYZ = self.swapYZ.GetValue()
-		self.selection.updateModelTransform()
-		if self.alwaysAutoPlace:
-			self.OnAutoPlace(None)
-		self.preview.Refresh()
 
 	def getExtraHeadSize(self):
 		extraSizeMin = self.headSizeMin
@@ -668,17 +581,10 @@ class projectPlanner(wx.Frame):
 		
 		return extraSizeMin, extraSizeMax
 
-class PreviewGLCanvas(glcanvas.GLCanvas):
+class PreviewGLCanvas(openglGui.glGuiPanel):
 	def __init__(self, parent, projectPlannerWindow):
-		attribList = (glcanvas.WX_GL_RGBA, glcanvas.WX_GL_DOUBLEBUFFER, glcanvas.WX_GL_DEPTH_SIZE, 24, glcanvas.WX_GL_STENCIL_SIZE, 8)
-		glcanvas.GLCanvas.__init__(self, parent, attribList = attribList)
+		super(PreviewGLCanvas, self).__init__(parent)
 		self.parent = projectPlannerWindow
-		self.context = glcanvas.GLContext(self)
-		wx.EVT_PAINT(self, self.OnPaint)
-		wx.EVT_SIZE(self, self.OnSize)
-		wx.EVT_ERASE_BACKGROUND(self, self.OnEraseBackground)
-		wx.EVT_LEFT_DOWN(self, self.OnMouseLeftDown)
-		wx.EVT_MOTION(self, self.OnMouseMotion)
 		wx.EVT_MOUSEWHEEL(self, self.OnMouseWheel)
 		self.yaw = 30
 		self.pitch = 60
@@ -689,42 +595,76 @@ class PreviewGLCanvas(glcanvas.GLCanvas):
 			self.zoom = 300
 		else:
 			self.zoom = self.parent.machineSize[0] / 2 + 10
+		self.dragType = ''
+		self.viewport = None
 		self.allowDrag = False
+		self.tempMatrix = None
 
 		self.objColor = profile.getPreferenceColour('model_colour')
 
 	def OnMouseLeftDown(self,e):
 		self.allowDrag = True
 		if not self.parent.alwaysAutoPlace and not self.view3D:
-			p0 = numpy.array(gluUnProject(e.GetX(), self.viewport[1] + self.viewport[3] - e.GetY(), 0, self.modelMatrix, self.projMatrix, self.viewport))
-			p1 = numpy.array(gluUnProject(e.GetX(), self.viewport[1] + self.viewport[3] - e.GetY(), 1, self.modelMatrix, self.projMatrix, self.viewport))
+			p0 = opengl.unproject(e.GetX(), self.viewport[1] + self.viewport[3] - e.GetY(), 0, self.modelMatrix, self.projMatrix, self.viewport)
+			p1 = opengl.unproject(e.GetX(), self.viewport[1] + self.viewport[3] - e.GetY(), 1, self.modelMatrix, self.projMatrix, self.viewport)
+			p0 -= self.viewTarget
+			p1 -= self.viewTarget
+			p0 -= self.getObjectCenterPos() - self.viewTarget
+			p1 -= self.getObjectCenterPos() - self.viewTarget
 			cursorZ0 = p0 - (p1 - p0) * (p0[2] / (p1[2] - p0[2]))
 
 			for item in self.parent.list:
-				iMin = (item.getMinimum() * item.scale) + numpy.array([item.centerX, item.centerY, 0]) - self.parent.extruderOffset[item.extruder]
-				iMax = (item.getMaximum() * item.scale) + numpy.array([item.centerX, item.centerY, 0]) - self.parent.extruderOffset[item.extruder]
+				iMin =-item.getSize() / 2 + numpy.array([item.centerX, item.centerY, 0])
+				iMax = item.getSize() / 2 + numpy.array([item.centerX, item.centerY, 0])
 				if iMin[0] <= cursorZ0[0] <= iMax[0] and iMin[1] <= cursorZ0[1] <= iMax[1]:
 					self.parent.selection = item
 					self.parent._updateListbox()
 					self.parent.OnListSelect(None)
 
 	def OnMouseMotion(self,e):
-		if self.allowDrag and e.Dragging() and e.LeftIsDown():
-			if self.view3D:
-				self.yaw += e.GetX() - self.oldX
-				self.pitch -= e.GetY() - self.oldY
-				if self.pitch > 170:
-					self.pitch = 170
-				if self.pitch < 10:
-					self.pitch = 10
-			elif not self.parent.alwaysAutoPlace:
-				item = self.parent.selection
-				if item is not None:
-					item.centerX += float(e.GetX() - self.oldX) * self.zoom / self.GetSize().GetHeight() * 2
-					item.centerY -= float(e.GetY() - self.oldY) * self.zoom / self.GetSize().GetHeight() * 2
-					item.clampXY()
-			self.Refresh()
+		if self.viewport is not None:
+			p0 = opengl.unproject(e.GetX(), self.viewport[1] + self.viewport[3] - e.GetY(), 0, self.modelMatrix, self.projMatrix, self.viewport)
+			p1 = opengl.unproject(e.GetX(), self.viewport[1] + self.viewport[3] - e.GetY(), 1, self.modelMatrix, self.projMatrix, self.viewport)
+			p0 -= self.viewTarget
+			p1 -= self.viewTarget
+			p0 -= self.getObjectCenterPos() - self.viewTarget
+			p1 -= self.getObjectCenterPos() - self.viewTarget
+			if not e.Dragging() or self.dragType != 'tool':
+				self.parent.tool.OnMouseMove(p0, p1)
 		else:
+			p0 = [0,0,0]
+			p1 = [1,0,0]
+
+		if self.allowDrag and e.Dragging() and e.LeftIsDown():
+			if self.dragType == '':
+				#Define the drag type depending on the cursor position.
+				self.dragType = 'viewRotate'
+				if self.parent.tool.OnDragStart(p0, p1):
+						self.dragType = 'tool'
+			if self.dragType == 'viewRotate':
+				if self.view3D:
+					self.yaw += e.GetX() - self.oldX
+					self.pitch -= e.GetY() - self.oldY
+					if self.pitch > 170:
+						self.pitch = 170
+					if self.pitch < 10:
+						self.pitch = 10
+				elif not self.parent.alwaysAutoPlace:
+					item = self.parent.selection
+					if item is not None:
+						item.centerX += float(e.GetX() - self.oldX) * self.zoom / self.GetSize().GetHeight() * 2
+						item.centerY -= float(e.GetY() - self.oldY) * self.zoom / self.GetSize().GetHeight() * 2
+						item.clampXY()
+			elif self.dragType == 'tool':
+				self.parent.tool.OnDrag(p0, p1)
+		else:
+			if self.dragType != '':
+				if self.tempMatrix is not None:
+					self.parent.selection.matrix *= self.tempMatrix
+					self.parent.selection.updateMatrix()
+					self.tempMatrix = None
+				self.parent.tool.OnDragEnd()
+				self.dragType = ''
 			self.allowDrag = False
 		if e.Dragging() and e.RightIsDown():
 			if self.view3D:
@@ -750,27 +690,20 @@ class PreviewGLCanvas(glcanvas.GLCanvas):
 		self.Refresh()
 
 	def OnPaint(self,event):
-		dc = wx.PaintDC(self)
-		if not hasOpenGLlibs:
-			dc.Clear()
-			dc.DrawText("No PyOpenGL installation found.\nNo preview window available.", 10, 10)
-			return
-		self.SetCurrent(self.context)
 		opengl.InitGL(self, self.view3D, self.zoom)
 		if self.view3D:
 			glTranslate(0,0,-self.zoom)
 			glRotate(-self.pitch, 1,0,0)
 			glRotate(self.yaw, 0,0,1)
-		else:
-			glTranslate(self.offsetX, self.offsetY, 0.0)
-		glTranslate(-self.parent.machineSize[0]/2, -self.parent.machineSize[1]/2, 0)
+		self.viewTarget = self.parent.machineSize / 2
+		self.viewTarget[2] = 0
+		glTranslate(-self.viewTarget[0], -self.viewTarget[1], -self.viewTarget[2])
 
-		self.viewport = glGetIntegerv(GL_VIEWPORT);
-		self.modelMatrix = glGetDoublev(GL_MODELVIEW_MATRIX);
-		self.projMatrix = glGetDoublev(GL_PROJECTION_MATRIX);
+		self.viewport = glGetIntegerv(GL_VIEWPORT)
+		self.modelMatrix = glGetDoublev(GL_MODELVIEW_MATRIX)
+		self.projMatrix = glGetDoublev(GL_PROJECTION_MATRIX)
 
 		self.OnDraw()
-		self.SwapBuffers()
 
 	def OnDraw(self):
 		machineSize = self.parent.machineSize
@@ -782,16 +715,16 @@ class PreviewGLCanvas(glcanvas.GLCanvas):
 		
 		for idx1 in xrange(0, len(self.parent.list)):
 			item = self.parent.list[idx1]
-			iMin1 = (item.getMinimum() * item.scale) + numpy.array([item.centerX, item.centerY, 0]) - extraSizeMin - self.parent.extruderOffset[item.extruder]
-			iMax1 = (item.getMaximum() * item.scale) + numpy.array([item.centerX, item.centerY, 0]) + extraSizeMax - self.parent.extruderOffset[item.extruder]
+			iMin1 =-item.getSize() / 2 + numpy.array([item.centerX, item.centerY, 0]) - extraSizeMin #- self.parent.extruderOffset[item.extruder]
+			iMax1 = item.getSize() / 2 + numpy.array([item.centerX, item.centerY, 0]) + extraSizeMax #- self.parent.extruderOffset[item.extruder]
 			if iMin1[0] < -self.parent.headSizeMin[0] or iMin1[1] < -self.parent.headSizeMin[1]:
 				item.validPlacement = False
 			if iMax1[0] > machineSize[0] + self.parent.headSizeMax[0] or iMax1[1] > machineSize[1] + self.parent.headSizeMax[1]:
 				item.validPlacement = False
 			for idx2 in xrange(0, idx1):
 				item2 = self.parent.list[idx2]
-				iMin2 = (item2.getMinimum() * item2.scale) + numpy.array([item2.centerX, item2.centerY, 0])
-				iMax2 = (item2.getMaximum() * item2.scale) + numpy.array([item2.centerX, item2.centerY, 0])
+				iMin2 =-item2.getSize() / 2 + numpy.array([item2.centerX, item2.centerY, 0])
+				iMax2 = item2.getSize() / 2 + numpy.array([item2.centerX, item2.centerY, 0])
 				if item != item2 and iMax1[0] >= iMin2[0] and iMin1[0] <= iMax2[0] and iMax1[1] >= iMin2[1] and iMin1[1] <= iMax2[1]:
 					item.validPlacement = False
 					item2.gotHit = True
@@ -804,7 +737,6 @@ class PreviewGLCanvas(glcanvas.GLCanvas):
 				item.modelDisplayList = glGenLists(1);
 			if item.modelDirty:
 				item.modelDirty = False
-				modelSize = item.getMaximum() - item.getMinimum()
 				glNewList(item.modelDisplayList, GL_COMPILE)
 				opengl.DrawMesh(item.mesh)
 				glEndList()
@@ -827,19 +759,32 @@ class PreviewGLCanvas(glcanvas.GLCanvas):
 			
 			glEnable(GL_LIGHTING)
 			glTranslate(item.centerX, item.centerY, 0)
+			vMin = item.getMinimum()
+			vMax = item.getMaximum()
+			offset = - vMin - (vMax - vMin) / 2
+			matrix = opengl.convert3x3MatrixTo4x4(item.matrix)
 			glPushMatrix()
-			glScalef(item.scale, item.scale, item.scale)
+			glTranslate(0, 0, item.getSize()[2]/2)
+			if self.tempMatrix is not None and item == self.parent.selection:
+				tempMatrix = opengl.convert3x3MatrixTo4x4(self.tempMatrix)
+				glMultMatrixf(tempMatrix)
+			glTranslate(0, 0, -item.getSize()[2]/2)
+			glTranslate(offset[0], offset[1], -vMin[2])
+			glMultMatrixf(matrix)
 			glCallList(item.modelDisplayList)
 			glPopMatrix()
-			
-			vMin = item.getMinimum() * item.scale
-			vMax = item.getMaximum() * item.scale
-			vMinHead = vMin - extraSizeMin - self.parent.extruderOffset[item.extruder]
-			vMaxHead = vMax + extraSizeMax - self.parent.extruderOffset[item.extruder]
+
+			vMin =-item.getSize() / 2
+			vMax = item.getSize() / 2
+			vMax[2] -= vMin[2]
+			vMin[2] = 0
+			vMinHead = vMin - extraSizeMin# - self.parent.extruderOffset[item.extruder]
+			vMaxHead = vMax + extraSizeMax# - self.parent.extruderOffset[item.extruder]
 
 			glDisable(GL_LIGHTING)
 
 			if not self.parent.alwaysAutoPlace:
+				glLineWidth(1)
 				if self.parent.selection == item:
 					if item.gotHit:
 						glColor3f(1.0,0.0,0.3)
@@ -867,7 +812,27 @@ class PreviewGLCanvas(glcanvas.GLCanvas):
 			glPopMatrix()
 		
 		opengl.DrawMachine(util3d.Vector3(machineSize[0], machineSize[1], machineSize[2]))
-		glFlush()
+
+		if self.parent.selection is not None:
+			glPushMatrix()
+			glTranslate(self.parent.selection.centerX, self.parent.selection.centerY, self.parent.selection.getSize()[2]/2)
+			self.parent.tool.OnDraw()
+			glPopMatrix()
+
+	def getObjectSize(self):
+		if self.parent.selection is not None:
+			return self.parent.selection.getSize()
+		return [0.0,0.0,0.0]
+	def getObjectBoundaryCircle(self):
+		if self.parent.selection is not None:
+			return self.parent.selection.getBoundaryCircle()
+		return 0.0
+	def getObjectMatrix(self):
+		return self.parent.selection.matrix
+	def getObjectCenterPos(self):
+		if self.parent.selection is None:
+			return [0,0,0]
+		return [self.parent.selection.centerX, self.parent.selection.centerY, self.getObjectSize()[2] / 2]
 
 class ProjectSliceProgressWindow(wx.Frame):
 	def __init__(self, sliceCommand, resultFilename, fileCount):

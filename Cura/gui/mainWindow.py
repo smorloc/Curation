@@ -139,6 +139,7 @@ class mainWindow(wx.Frame):
 		self.splitter = wx.SplitterWindow(self, style = wx.SP_3D | wx.SP_LIVE_UPDATE)
 		self.leftPane = wx.Panel(self.splitter, style=wx.BORDER_NONE)
 		self.rightPane = wx.Panel(self.splitter, style=wx.BORDER_NONE)
+		self.splitter.Bind(wx.EVT_SPLITTER_DCLICK, lambda evt: evt.Veto())
 
 		##Gui components##
 		self.settingsPanel = settingsPanel(self.leftPane)
@@ -186,7 +187,7 @@ class mainWindow(wx.Frame):
 			sizer.Add(loadButton4, (1,4), flag=wx.RIGHT|wx.BOTTOM|wx.TOP, border=5)
 		sizer.Add(sliceButton, (1,1+self.extruderCount), flag=wx.RIGHT|wx.BOTTOM|wx.TOP, border=5)
 		sizer.Add(printButton, (1,2+self.extruderCount), flag=wx.RIGHT|wx.BOTTOM|wx.TOP, border=5)		
-		
+
 		# Main window sizer
 		sizer = wx.BoxSizer(wx.VERTICAL)
 		self.SetSizer(sizer)
@@ -486,9 +487,9 @@ class settingsPanel(configBase.configPanelBase):
 		super(settingsPanel, self).__init__(parent)
 
 		#Main tabs
-		nb = wx.Notebook(self)
-		self.SetSizer(wx.BoxSizer(wx.VERTICAL))
-		self.GetSizer().Add(nb, 1, wx.EXPAND)
+		self.nb = wx.Notebook(self)
+		self.SetSizer(wx.BoxSizer(wx.HORIZONTAL))
+		self.GetSizer().Add(self.nb, 1, wx.EXPAND)
 
 		(left) = self.CreateSimpleConfigTab(nb, 'Basic')
 		right = left
@@ -538,6 +539,8 @@ class settingsPanel(configBase.configPanelBase):
 		(left) = self.CreateSimpleConfigTab(nb, 'Advanced')
 		right = left
 		
+		(left, right, self.advancedPanel) = self.CreateDynamicConfigTab(self.nb, 'Advanced config')
+		
 		configBase.TitleRow(left, "Machine size")
 		c = configBase.SettingRow(left, "Nozzle size (mm)", 'nozzle_size', '0.4', 'The nozzle size is very important, this is used to calculate the line width of the infill, and used to calculate the amount of outside wall lines and thickness for the wall thickness you entered in the print settings.')
 		validators.validFloat(c, 0.1, 10.0)
@@ -581,16 +584,80 @@ class settingsPanel(configBase.configPanelBase):
 		self.expertConfigPanel = expertConfig.expertConfigPanel(self, nb)
 
 		#Plugin page
-		self.pluginPanel = pluginPanel.pluginPanel(nb)
+		self.pluginPanel = pluginPanel.pluginPanel(self.nb)
 		if len(self.pluginPanel.pluginList) > 0:
-			nb.AddPage(self.pluginPanel, "Plugins")
+			self.nb.AddPage(self.pluginPanel, "Plugins")
 		else:
 			self.pluginPanel.Show(False)
 
 		#Alteration page
-		self.alterationPanel = alterationPanel.alterationPanel(nb)
-		nb.AddPage(self.alterationPanel, "Start/End-GCode")
+		self.alterationPanel = alterationPanel.alterationPanel(self.nb)
+		self.nb.AddPage(self.alterationPanel, "Start/End-GCode")
 
+		self.Bind(wx.EVT_SIZE, self.OnSize)
+
+	def SizeLabelWidths(self, left, right):
+		leftWidth = self.getLabelColumnWidth(left)
+		rightWidth = self.getLabelColumnWidth(right)
+		maxWidth = max(leftWidth, rightWidth)
+		self.setLabelColumnWidth(left, maxWidth)
+		self.setLabelColumnWidth(right, maxWidth)
+
+	def OnSize(self, e):
+		# Make the size of the Notebook control the same size as this control
+		self.nb.SetSize(self.GetSize())
+		
+		# Propegate the OnSize() event (just in case)
+		e.Skip()
+		
+		# Perform out resize magic
+		self.UpdateSize(self.printPanel)
+		self.UpdateSize(self.advancedPanel)
+	
+	def UpdateSize(self, configPanel):
+		sizer = configPanel.GetSizer()
+		
+		# Pseudocde
+		# if horizontal:
+		#     if width(col1) < best_width(col1) || width(col2) < best_width(col2):
+		#         switch to vertical
+		# else:
+		#     if width(col1) > (best_width(col1) + best_width(col1)):
+		#         switch to horizontal
+		#
+				
+		col1 = configPanel.leftPanel
+		colSize1 = col1.GetSize()
+		colBestSize1 = col1.GetBestSize()
+		col2 = configPanel.rightPanel
+		colSize2 = col2.GetSize()
+		colBestSize2 = col2.GetBestSize()
+
+		orientation = sizer.GetOrientation()
+		
+		if orientation == wx.HORIZONTAL:
+			if (colSize1[0] <= colBestSize1[0]) or (colSize2[0] <= colBestSize2[0]):
+				configPanel.Freeze()
+				sizer = wx.BoxSizer(wx.VERTICAL)
+				sizer.Add(configPanel.leftPanel, flag=wx.EXPAND)
+				sizer.Add(configPanel.rightPanel, flag=wx.EXPAND)
+				configPanel.SetSizer(sizer)
+				#sizer.Layout()
+				configPanel.Layout()
+				self.Layout()
+				configPanel.Thaw()
+		else:
+			if colSize1[0] > (colBestSize1[0] + colBestSize2[0]):
+				configPanel.Freeze()
+				sizer = wx.BoxSizer(wx.HORIZONTAL)
+				sizer.Add(configPanel.leftPanel, proportion=1, border=35, flag=wx.EXPAND)
+				sizer.Add(configPanel.rightPanel, proportion=1, flag=wx.EXPAND)
+				configPanel.SetSizer(sizer)
+				#sizer.Layout()
+				configPanel.Layout()
+				self.Layout()
+				configPanel.Thaw()
+				
 	def updateProfileToControls(self):
 		super(settingsPanel, self).updateProfileToControls()
 		self.alterationPanel.updateProfileToControls()
