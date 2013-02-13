@@ -69,7 +69,7 @@ class pluginPanel(wx.Panel):
 		for pluginTest in self.pluginList:
 			if pluginTest['filename'] == pluginConfig['filename']:
 				plugin = pluginTest
-		if plugin is None:
+			if plugin is None:
 				break
 		if plugin is None:
 			return False

@@ -126,6 +126,13 @@ class configPanelBase(wx.Panel):
 				size[0] = width
 				child.SetBestSize(size)
 	
+	def SizeLabelWidths(self, left, right):
+		leftWidth = self.getLabelColumnWidth(left)
+		rightWidth = self.getLabelColumnWidth(right)
+		maxWidth = max(leftWidth, rightWidth)
+		self.setLabelColumnWidth(left, maxWidth)
+		self.setLabelColumnWidth(right, maxWidth)
+
 class TitleRow():
 	def __init__(self, panel, name):
 		"Add a title row to the configuration panel"

@@ -462,8 +462,7 @@ class settingsPanel(configBase.configPanelBase):
 		self.SetSizer(wx.BoxSizer(wx.HORIZONTAL))
 		self.GetSizer().Add(self.nb, 1, wx.EXPAND)
 
-		(left) = self.CreateSimpleConfigTab(nb, 'Basic')
-		right = left
+		(left, right, self.printPanel) = self.CreateDynamicConfigTab(self.nb, 'Basic')
 
 		configBase.TitleRow(left, "Quality")
 		c = configBase.SettingRow(left, "Layer height (mm)", 'layer_height', '0.2', 'Layer height in millimeters.\n0.2 is a good value for quick prints.\n0.1 gives high quality prints.')
@@ -507,10 +506,7 @@ class settingsPanel(configBase.configPanelBase):
 		c = configBase.SettingRow(right, "Packing Density", 'filament_density', '1.00', 'Packing density of your filament. This should be 1.00 for PLA and 0.85 for ABS')
 		validators.validFloat(c, 0.5, 1.5)
 
-		(left) = self.CreateSimpleConfigTab(nb, 'Advanced')
-		right = left
-		
-		(left, right, self.advancedPanel) = self.CreateDynamicConfigTab(self.nb, 'Advanced config')
+		(left, right, self.advancedPanel) = self.CreateDynamicConfigTab(self.nb, 'Advanced')
 		
 		configBase.TitleRow(left, "Machine size")
 		c = configBase.SettingRow(left, "Nozzle size (mm)", 'nozzle_size', '0.4', 'The nozzle size is very important, this is used to calculate the line width of the infill, and used to calculate the amount of outside wall lines and thickness for the wall thickness you entered in the print settings.')
@@ -552,7 +548,7 @@ class settingsPanel(configBase.configPanelBase):
 		validators.warningAbove(c, lambda : (float(profile.getProfileSetting('nozzle_size')) * 3.0 / 4.0), "A bottom layer of more then %.2fmm (3/4 nozzle size) usually give bad results and is not recommended.")
 		c = configBase.SettingRow(right, "Duplicate outlines", 'enable_skin', False, 'Skin prints the outer lines of the prints twice, each time with half the thickness. This gives the illusion of a higher print quality.')
 
-		self.expertConfigPanel = expertConfig.expertConfigPanel(self, nb)
+		self.expertConfigPanel = expertConfig.expertConfigPanel(self, self.nb)
 
 		#Plugin page
 		self.pluginPanel = pluginPanel.pluginPanel(self.nb)
@@ -584,6 +580,7 @@ class settingsPanel(configBase.configPanelBase):
 		# Perform out resize magic
 		self.UpdateSize(self.printPanel)
 		self.UpdateSize(self.advancedPanel)
+		self.UpdateSize(self.expertConfigPanel.panel)
 	
 	def UpdateSize(self, configPanel):
 		sizer = configPanel.GetSizer()

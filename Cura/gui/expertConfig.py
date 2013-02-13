@@ -8,8 +8,8 @@ from Cura.util import validators
 class expertConfigPanel:
 	"Expert configuration Panel"
 	def __init__(self, cb, parent):
-		(left) = cb.CreateSimpleConfigTab(parent, 'Expert')
-		right = left
+		
+		(left, right, self.panel) = cb.CreateDynamicConfigTab(parent, 'Expert')
 		
 		configBase.TitleRow(left, "Accuracy")
 		c = configBase.SettingRow(left, "Extra Wall thickness for bottom/top (mm)", 'extra_base_wall_thickness', '0.0', 'Additional wall thickness of the bottom and top layers.')
@@ -61,3 +61,6 @@ class expertConfigPanel:
 
 		configBase.TitleRow(right, "Hop")
 		c = configBase.SettingRow(right, "Enable hop on move", 'hop_on_move', False, 'When moving from print position to print position, raise the printer head 0.2mm so it does not knock off the print (experimental).')
+
+		cb.SizeLabelWidths(left, right)
+
